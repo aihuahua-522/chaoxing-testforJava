@@ -2,7 +2,6 @@ import bean.ClassBean;
 import bean.SignBean;
 import bean.scanningBean;
 import com.google.gson.Gson;
-import com.sun.jndi.toolkit.url.UrlUtil;
 import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -12,6 +11,7 @@ import org.jsoup.select.Elements;
 import java.io.*;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -109,13 +109,17 @@ public class testLoginMain {
 //        properties.load(testLoginMain.class.getResourceAsStream("signInfo.properties"));
         File file = new File("signInfo.properties");
         if (file.exists()) {
-            properties.load(new InputStreamReader(new FileInputStream(file)));
+            properties.load(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8));
             System.out.println("你的设置扫描时间为" + properties.getProperty("signTime").replaceAll("\"", ""));
             System.out.println("你的定位签到地点为" + properties.getProperty("signPlace").replaceAll("\"", ""));
+            System.out.println("你的开始时间是" + properties.getProperty("startTime").replaceAll("\"", ""));
+            System.out.println("你的结束时间是" + properties.getProperty("endTime").replaceAll("\"", ""));
             temp.put("signTime", properties.getProperty("signTime").replaceAll("\"", ""));
             temp.put("signPlace", properties.getProperty("signPlace").replaceAll("\"", ""));
             temp.put("username", properties.getProperty("username").replaceAll("\"", ""));
             temp.put("password", properties.getProperty("password").replaceAll("\"", ""));
+            temp.put("startTime", properties.getProperty("startTime").replaceAll("\"", ""));
+            temp.put("endTime", properties.getProperty("endTime").replaceAll("\"", ""));
             return;
         }
         throw new RuntimeException("配置文件被删除，请重新解压");
@@ -263,9 +267,16 @@ public class testLoginMain {
 
     private static synchronized void startSign(ArrayList<ClassBean> classBeans) {
         ArrayList<SignBean> signBeans = new ArrayList<>();
+        int startTime = Integer.parseInt(temp.get("startTime"));
+        int endTime = Integer.parseInt(temp.get("endTime"));
+        int thisHour = new Date().getHours();
+        if (!(startTime <= thisHour && thisHour <= endTime)) {
+            System.out.println("时间 -> " + thisHour + "不是扫描时间点");
+            return;
+        }
+        System.out.println("时间 -> " + thisHour + "是扫描时间点,开始运行");
         new Thread(new Runnable() {
             int num;
-            private Elements elements;
 
             @Override
             public void run() {
@@ -276,7 +287,7 @@ public class testLoginMain {
                     try {
                         Connection.Response response = Jsoup.connect(url).cookies(cookiesMap).method(Connection.Method.GET).timeout(30000).execute();
                         Document document = response.parse();
-                        elements = document.select("#startList div .Mct");
+                        Elements elements = document.select("#startList div .Mct");
                         if (elements == null || elements.size() == 0) {
 //                            System.out.println("无签到活动");
                             continue;
@@ -301,9 +312,9 @@ public class testLoginMain {
                                     continue;
                                 }
                                 String signUrl = "https://mobilelearn.chaoxing.com/pptSign/stuSignajax?name="
-                                        + URLDecoder.decode(temp.get("name"),"utf-8")
+                                        + URLDecoder.decode(temp.get("name"), "utf-8")
                                         + "&address="
-                                        + URLEncoder.encode(temp.get("signPlace"),"utf-8")
+                                        + URLEncoder.encode(temp.get("signPlace"), "utf-8")
                                         + "&activeId="
                                         + activeId
                                         + "&uid="
@@ -350,6 +361,7 @@ public class testLoginMain {
                 System.out.println(temp.toString());
             }
         }).start();
+
     }
 
     private static class GetQr {

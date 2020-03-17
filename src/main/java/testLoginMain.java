@@ -49,6 +49,30 @@ public class testLoginMain {
         }
     }
 
+    public static String readFromFile(File src) {
+        try {
+            BufferedReader bufferedReader = new BufferedReader(new FileReader(
+                    src));
+            StringBuilder stringBuilder = new StringBuilder();
+            String content;
+            while((content = bufferedReader.readLine() )!=null){
+                stringBuilder.append(content);
+            }
+            return stringBuilder.toString();
+        } catch (FileNotFoundException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+            return null;
+        } catch (IOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+            return null;
+        }
+
+    }
+
+
+
     public static void main(String[] args) {
         try {
 
@@ -87,8 +111,69 @@ public class testLoginMain {
                 }
             }
 
-            // 到这里一定登录成功（bug除外）
 
+            HashMap<String, String> stringStringHashMap = new HashMap<>();
+            stringStringHashMap.put("route", "b4d4d919a086adf195f8995091f2db3d");
+            stringStringHashMap.put("_industry", "5");
+            stringStringHashMap.put("fidsCount", "1");
+            stringStringHashMap.put("lv", "4");
+            stringStringHashMap.put("fid", "10567");
+            stringStringHashMap.put("_uid", "82674419");
+            stringStringHashMap.put("uf", "b2d2c93beefa90dc0e22d16d4c94f2c477f521284e68967da266dbc4d63edd7611dd7ddbb57b0a04cad620ec8842526f913b662843f1f4ad6d92e371d7fdf644d490c7da6f959ca6f3dba97bc9a5444941f23d7060bd78ccc4d86d773b6beb7424656e81bc3a59c9aa2ebad65cd196bb");
+            stringStringHashMap.put("_d", "1584427256629");
+            stringStringHashMap.put("UID", "82674419");
+            stringStringHashMap.put("vc", "E5FB851D7A53505DBE80B21DA949D116");
+            stringStringHashMap.put("vc2", "AD57CF34ECE8862FB5B0AF6174F01269");
+            stringStringHashMap.put("vc3", "YZylttC%2F5PZCC83mhzsXtRv4lpm0eWV4ucIl6%2Bdnh3eoCqKqHq8za7XUp00p%2F7xUJjaJmubBe071YMpE%2Brl3ohcfUePfX%2BjGPdhR8nPvGWsQGHSKpk%2FVyYBvSQKN3jPMR3%2B6Cew0so0CTLFdFUX%2FbA5gzqsV9jFRSXfEk37IkCE%3D08ba75ebf5b93ff2bdd1ba10fb7d37e9");
+            stringStringHashMap.put("xxtenc", "9859de4514cc55ab32cbee1ce9eda30b");
+            stringStringHashMap.put("DSSTASH_LOG", "C_38-UN_10009-US_82674419-T_1584427256631");
+            stringStringHashMap.put("sso_puid", "82674419");
+            stringStringHashMap.put("KI4SO_SERVER_EC", "RERFSWdRQWdsckQ0aGRFcytqcUZFajBGZG1XM2hMSFFPbGExaitDNHpIOG1zWS85VUw3OVdSUk1K%0AYmdUcjhSM0NPdGdxMXhwZmNPcApyTHAzald4UVJVaUxyaFg4Zlk5SGQrU1ZLS0E2TitMclJ1a0ZW%0AMy9nZ01FRXdUUWt5Q3dmVlQ3aTM5NTEvSC");
+            stringStringHashMap.put("_tid", "58785311");
+
+
+            File file = new File("a.json");
+            FileInputStream inputStream = new FileInputStream(file);
+            cookiesMap.put("sso_puid", cookiesMap.get("UID"));
+            // 到这里一定登录成功（bug除外）
+            String getTokenUrl = "https://pan-yz.chaoxing.com/api/token/uservalid";
+            String tokenResult = Jsoup.connect(getTokenUrl).method(Connection.Method.GET).cookies(stringStringHashMap).execute().body();
+            System.out.println("tokenResult ----> " + "\n" + tokenResult);
+
+
+            String sendUidUrl = "https://pan-yz.chaoxing.com/api/crcstatus?puid=" + stringStringHashMap.get("UID") + "&crc=bfb2e7968005665f8ac0d0465099a9d7&_token=6e580ee9878115521398035f530c4155";
+            String sendUidResult = Jsoup.connect(sendUidUrl).method(Connection.Method.GET).cookies(stringStringHashMap).execute().body();
+            System.out.println("sendUidResult ---->" + "\n" + sendUidResult);
+
+
+            String uploadUrl = "https://pan-yz.chaoxing.com/upload?_token=6e580ee9878115521398035f530c4155";
+            HttpUtil.trustEveryone();
+
+            String response222 = Jsoup.connect(uploadUrl)
+                    .method(Connection.Method.POST)
+                    .cookies(stringStringHashMap)
+                    .header("Content-Type", "application/json; charset=UTF-8")
+                    .header("Accept", "text/plain, */*; q=0.01")
+                    .header("Accept-Encoding", "gzip,deflate,sdch")
+                    .header("Accept-Language", "es-ES,es;q=0.8")
+                    .header("Connection", "keep-alive")
+                    .header("X-Requested-With", "XMLHttpRequest")
+                    .data("puid","82674419")
+                    .data("file",file.getName(),inputStream)
+                    .maxBodySize(1024000)
+                    .timeout(30000)
+                    .execute()
+                    .body();
+            System.out.println(response222);
+            Connection.Response response1 = Jsoup.connect(uploadUrl)
+                    .data("puid","82674419")            // 绑定数据
+                    .cookies(stringStringHashMap)
+                    .header("Content-Type","application/json;charset=utf-8")
+                    .data("file", "uploadTest.txt", inputStream,"multipart/form-data")   // 上传文件
+                    .method(Connection.Method.POST)
+                    .execute();
+
+            System.out.println(response1.parse());
             // 4. 获取班级信息
             ArrayList<ClassBean> classBeans = getClassBeans();
             String name = getName();
@@ -123,44 +208,7 @@ public class testLoginMain {
             return;
         }
         throw new RuntimeException("配置文件被删除，请重新解压");
-
-
     }
-
-/*    private static void startSign(ArrayList<classBean> classBeans) {
-        classBeans.forEach(classBean -> {
-            String url = classBean.getUrl();
-            try {
-                Connection.Response response = Jsoup.connect(url).cookies(cookiesMap).method(Connection.Method.GET).execute();
-                Document document = response.parse();
-                Elements elements = document.select("#startList div .Mct");
-                for (Element ele : elements) {
-                    String onclick = ele.attr("onclick");
-                    System.out.println(onclick);
-                    if (onclick != null && onclick.length() > 0) {
-                        String split = onclick.split("\\(")[1];
-                        String activeId = split.split(",")[0];
-                        System.out.println(split);
-                        System.out.println(activeId);
-                        String signUrl = "https://mobilelearn.chaoxing.com/pptSign/stuSignajax?name="+name+"%E6%97%B7%E5%BC%80%E6%88%88&"+address+address=%e6%b1%9f%e8%a5%bf%e4%b8%87%e5%ae%89&activeId=" + activeId + "&uid=" + cookiesMap.get("_uid") + "&clientip=&latitude=-1&longitude=-1&fid=" + cookiesMap.get("fid") + "&appType=15&ifTiJiao=1";
-                        System.out.println(signUrl);
-                        System.out.println("==============" + activeId + "签到中=================");
-                        Connection.Response signResponse = Jsoup.connect(signUrl).cookies(cookiesMap).method(Connection.Method.GET).execute();
-                        Element element = signResponse.parse().body();
-                        System.out.println(element);
-                        System.out.println("签到状态" + element.select(".greenColor").text());
-                        System.out.println("签到时间" + element.select("#st").text());
-                        System.out.println("签到类型" + element.select(".Mct_center>a").text());
-                        System.out.println("签到剩余时间" + element.select(".Time_ic > em").text());
-                        Thread.sleep(1000);
-                    }
-                }
-
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        });
-    }*/
 
     private static String getName() throws Exception {
         String getName = "http://i.chaoxing.com/base";

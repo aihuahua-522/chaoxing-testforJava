@@ -4,11 +4,9 @@ import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -103,7 +101,7 @@ public class picTest {
                 requestBody.addFormDataPart(key, value);
             }
         }
-        Request request = new Request.Builder().url(url).header("Cookie",stringStringHashMap.toString()).post(requestBody.build()).build();
+        Request request = new Request.Builder().url(url).header("Cookie", stringStringHashMap.toString()).post(requestBody.build()).build();
         // readTimeout("请求超时时间" , 时间单位);
         client.newBuilder().readTimeout(5000, TimeUnit.MILLISECONDS).build().newCall(request).enqueue(callback);
 

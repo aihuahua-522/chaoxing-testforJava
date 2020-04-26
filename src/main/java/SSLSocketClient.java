@@ -18,7 +18,7 @@ public class SSLSocketClient {
     }
 
     //获取TrustManager
-    private static TrustManager[] getTrustManager() {
+     static TrustManager[] getTrustManager() {
         //不校检证书链
         TrustManager[] trustAllCerts = new TrustManager[]{
                 new X509TrustManager() {

@@ -14,26 +14,39 @@ import java.net.URLDecoder;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class testLoginMain {
 
+    private static final ArrayList<PicBean> picBeans = new ArrayList<>();
+    private static final Pattern pattern = Pattern.compile("\\d{5,}");
+    private static final Pattern pattern2 = Pattern.compile("我的排名：\\d{1,2}");
+    private static final ScheduledExecutorService service = new ScheduledThreadPoolExecutor(1);
     static String loginUrl = "http://passport2.chaoxing.com/cloudscanlogin?mobiletip=%e7%94%b5%e8%84%91%e7%ab%af%e7%99%bb%e5%bd%95%e7%a1%ae%e8%ae%a4&pcrefer=http://i.chaoxing.com";
     static HashMap<String, String> temp = new HashMap<>();
     private static String name = "";
+    private static String qq = "";
+    private static String sendMessage = "";
     private static HashMap<String, String> cookiesMap;
-    private static ArrayList<PicBean> picBeans = new ArrayList<>();
+    private static boolean isAnswer;
+
 
     public static void saveMap(Map<String, String> cookiesMap) throws IOException {
         ObjectOutputStream outputStream = new ObjectOutputStream(new FileOutputStream("a.json"));
         outputStream.writeObject(cookiesMap);
     }
 
+
     public static void deleteMap() {
         File file = new File("a.json");
         if (file.exists()) {
             boolean delete = file.delete();
-            if (delete == true) {
+            if (delete) {
                 System.out.println("退出登录成功");
             } else {
                 System.out.println("请手动删除a.json文件");
@@ -56,11 +69,9 @@ public class testLoginMain {
             initSetting();
             // 1. 检查是否登录
             cookiesMap = (HashMap<String, String>) getMap();
-
             if (cookiesMap == null) {
                 //2.未登录
                 System.out.println("未登录");
-
                 //判断用户选择扫码登录还是账号密码登录
                 if ("".equals(temp.get("username")) || temp.get("password").equals("")) {
                     System.out.println("你选择的是扫码登录");
@@ -87,22 +98,20 @@ public class testLoginMain {
                     }
                 }
             }
-
             // 到这里一定登录成功（bug除外）
-
             // 初始化图片
             System.out.println("初始化图片");
             new picinit(cookiesMap).initPic(picBeans);
             // 4. 获取班级信息
             ArrayList<ClassBean> classBeans = getClassBeans();
-            String name = getName();
-            temp.put("name", name);
+            name = URLEncoder.encode(getName(), "utf-8");
             // 5. 开始签到
             int signTime = Integer.parseInt(temp.get("signTime"));
-            while (true) {
-                startSign(classBeans);
-                Thread.sleep(signTime);
-            }
+            String signPlace = temp.get("signPlace");
+            qq = temp.get("qq");
+            sendMessage = temp.get("sendMessage");
+            System.out.println("等待10s上传拍照图片");
+            service.scheduleWithFixedDelay(new signRunning(URLEncoder.encode(signPlace, "utf-8"), classBeans, picBeans), 10, signTime, TimeUnit.SECONDS);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -110,7 +119,6 @@ public class testLoginMain {
 
     private static void initSetting() throws IOException {
         Properties properties = new Properties();
-//        properties.load(testLoginMain.class.getResourceAsStream("signInfo.properties"));
         File file = new File("signInfo.properties");
         if (file.exists()) {
             properties.load(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8));
@@ -118,12 +126,18 @@ public class testLoginMain {
             System.out.println("你的定位签到地点为" + properties.getProperty("signPlace").replaceAll("\"", ""));
             System.out.println("你的开始时间是" + properties.getProperty("startTime").replaceAll("\"", ""));
             System.out.println("你的结束时间是" + properties.getProperty("endTime").replaceAll("\"", ""));
+            System.out.println("你的通知qq号是" + properties.getProperty("qq").replaceAll("\"", ""));
+            System.out.println("你的发送消息url是" + properties.getProperty("sendMessage").replaceAll("\"", ""));
+            System.out.println("是否抢答" + properties.getProperty("isAnswer").replaceAll("\"", ""));
             temp.put("signTime", properties.getProperty("signTime").replaceAll("\"", ""));
             temp.put("signPlace", properties.getProperty("signPlace").replaceAll("\"", ""));
             temp.put("username", properties.getProperty("username").replaceAll("\"", ""));
             temp.put("password", properties.getProperty("password").replaceAll("\"", ""));
             temp.put("startTime", properties.getProperty("startTime").replaceAll("\"", ""));
             temp.put("endTime", properties.getProperty("endTime").replaceAll("\"", ""));
+            temp.put("qq", properties.getProperty("qq").replaceAll("\"", ""));
+            temp.put("sendMessage", properties.getProperty("sendMessage").replaceAll("\"", ""));
+            isAnswer = Integer.parseInt(properties.getProperty("isAnswer").replaceAll("\"", "")) == 1;
             return;
         }
         throw new RuntimeException("配置文件被删除，请重新解压");
@@ -195,8 +209,6 @@ public class testLoginMain {
         Elements classElements = classDocument.select(".ulDiv > ul > li[style]");
         for (Element classElement : classElements) {
             ClassBean classBean = new ClassBean();
-//            System.out.println(classElement);
-//            System.out.println("======================================================");
             String courseId = classElement.select("[name = courseId]").attr("value");
             String classId = classElement.select("[name = classId]").attr("value");
             //课程名
@@ -232,106 +244,10 @@ public class testLoginMain {
 //        runtime.exec("cmd /c " + file.getAbsolutePath());
     }
 
-    private static synchronized void startSign(ArrayList<ClassBean> classBeans) {
-        ArrayList<SignBean> signBeans = new ArrayList<>();
-        int startTime = Integer.parseInt(temp.get("startTime"));
-        int endTime = Integer.parseInt(temp.get("endTime"));
-        int thisHour = new Date().getHours();
-        if (!(startTime <= thisHour && thisHour <= endTime)) {
-            System.out.println("时间 -> " + thisHour + "不是扫描时间点");
-            return;
-        }
-        System.out.println("时间 -> " + thisHour + "是扫描时间点,开始运行");
-        new Thread(new Runnable() {
-            int num;
-
-            @Override
-            public void run() {
-                System.out.println(dateUtil.getThisTime() + "签到运行");
-                signBeans.clear();
-                for (int i = 0; i < classBeans.size(); i++) {
-                    String url = classBeans.get(i).getUrl();
-                    try {
-                        Connection.Response response = Jsoup.connect(url).cookies(cookiesMap).method(Connection.Method.GET).timeout(30000).execute();
-                        Document document = response.parse();
-                        Elements elements = document.select("#startList div .Mct");
-                        if (elements == null || elements.size() == 0) {
-                            continue;
-                        }
-                        for (Element ele : elements) {
-                            String onclick = ele.attr("onclick");
-                            if (onclick != null && onclick.length() > 0) {
-                                String split = onclick.split("\\(")[1];
-                                String activeId = split.split(",")[0];
-                                if (temp.get(activeId) != null) {
-                                    SignBean signBean = new SignBean();
-                                    signBean.setSignClass(classBeans.get(i).getClassName());
-                                    signBean.setSignName(classBeans.get(i).getClassmate());
-                                    signBean.setSignState("签到成功");
-                                    signBean.setSignTime(ele.select(".Color_Orang").text());
-                                    num++;
-                                    signBeans.add(signBean);
-                                    continue;
-                                }
-                                String signUrl = "https://mobilelearn.chaoxing.com/pptSign/stuSignajax?name="
-                                        + URLDecoder.decode(temp.get("name"), "utf-8")
-                                        + "&address="
-                                        + URLEncoder.encode(temp.get("signPlace"), "utf-8")
-                                        + "&activeId="
-                                        + activeId
-                                        + "&uid="
-                                        + cookiesMap.get("_uid")
-                                        + "&clientip=&latitude=-1&longitude=-1&fid="
-                                        + cookiesMap.get("fid")
-                                        + "&appType=15&ifTiJiao=1";
-                                if (picBeans != null && picBeans.size() != 0) {
-                                    Random random = new Random();
-                                    int nextInt = random.nextInt(picBeans.size());
-                                    signUrl = signUrl + "&objectId=" + picBeans.get(nextInt).getObjectId();
-                                }
-//                                System.out.println(signUrl);
-//                                System.out.println("==============" + activeId + "签到中=================");
-                                Connection.Response signResponse = Jsoup.connect(signUrl).cookies(cookiesMap).method(Connection.Method.GET).timeout(30000).execute();
-                                Element element = signResponse.parse().body();
-//                                System.out.println("签到状态" + element.getElementsByTag("body").text());
-                                SignBean signBean = new SignBean();
-                                signBean.setSignClass(classBeans.get(i).getClassName());
-                                signBean.setSignName(classBeans.get(i).getClassmate());
-                                signBean.setSignState(element.getElementsByTag("body").text());
-                                signBean.setSignTime(ele.select(".Color_Orang").text());
-                                if (signBean.getSignState().equals("您已签到过了")) {
-                                    temp.put(activeId, "签到成功");
-                                }
-                                num++;
-                                signBeans.add(signBean);
-                                Thread.sleep(1000);
-                            }
-                        }
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-                StringBuilder temp = new StringBuilder();
-                if (signBeans == null || signBeans.size() == 0) {
-                    temp.append("无正在签到的活动");
-                } else {
-                    for (SignBean signBean : signBeans) {
-                        temp.append(dateUtil.getThisTime()).append("\n")
-                                .append("签到课程").append(signBean.getSignClass()).append("\n")
-                                .append("签到状态").append(signBean.getSignState()).append("\n")
-                                .append("剩余时间").append(signBean.getSignTime()).append("\n");
-                    }
-                    temp.append(dateUtil.getThisTime() + "-----------------------扫描完成").append("\n")
-                            .append("总个数").append(signBeans.size()).append("\n")
-                            .append("签到成功个数").append(num);
-                }
-                System.out.println(temp.toString());
-            }
-        }).start();
-
-    }
 
     private static class GetQr {
+
+
         private Map<String, String> cookies;
         private String uuid;
         private String enc;
@@ -355,9 +271,226 @@ public class testLoginMain {
             Document document = response.parse();
             uuid = document.select("input[ id =uuid]").attr("value");
             enc = document.select("input[ id =enc]").attr("value");
-//            System.out.println("uuid = " + uuid);
-//            System.out.println(" enc = " + enc);
             return this;
         }
     }
+
+    static class signRunning implements Runnable {
+
+        String signPlace;
+        ArrayList<ClassBean> classBeans;
+        ArrayList<PicBean> picBeans;
+
+        public signRunning(String signPlace, ArrayList<ClassBean> classBeans, ArrayList<PicBean> picBeans) {
+            this.classBeans = classBeans;
+            this.picBeans = picBeans;
+            this.signPlace = signPlace;
+        }
+
+        @Override
+        public void run() {
+            try {
+                System.out.println(DateUtil.getTime() + "正在运行");
+                beginExecution(qq, cookiesMap, classBeans, name, picBeans, signPlace);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+
+        private void beginExecution(String email, HashMap<String, String> cookie, ArrayList<ClassBean> courseBeans, String name, ArrayList<PicBean> picBeans, String signPlace) throws Exception {
+            for (ClassBean courseBean : courseBeans) {
+                String signUrl = courseBean.getUrl();
+                Connection.Response response = Jsoup.connect(signUrl).cookies(cookie).timeout(300000).execute();
+                Document document = response.parse();
+                if (!document.title().contains("学生端-活动首页")) {
+                    main(null);
+                    // TODO 刷新cookie
+                }
+                Elements elements = document.select("#startList > div> div");
+                judgeType(email, cookie, name, picBeans, courseBean, elements, signPlace);
+            }
+        }
+
+
+        private void judgeType(String email, HashMap<String, String> cookie, String name, ArrayList<PicBean> picBeans, ClassBean courseBean, Elements elements, String signPlace) throws Exception {
+            for (Element element : elements) {
+                String state = element.select("div > dl > a > dd ").text();
+                String s = element.attr("onclick");
+                Matcher matcher = pattern.matcher(s);
+                String activeId = matcher.find() ? matcher.group() : "";
+                String signTime = element.selectFirst(".Color_Orang").text();
+                if (signTime == null || signTime.isEmpty()) {
+                    signTime = "嘤嘤嘤.手动看他不香吗";
+                }
+                String signText = element.selectFirst(".Mct_center a[shape]").text();
+                String signT = element.selectFirst(" a[shape]").text();
+                if (temp.get(activeId) != null) {
+                    continue;
+                }
+                switch (state) {
+                    case "签到":
+                        signByActiveId(email, signTime, signText, courseBean, cookie, name, picBeans, signPlace, activeId);
+                        break;
+                    case "问卷":
+                        answerByActiveId(email, signTime, signText, courseBean, activeId);
+                        break;
+                    case "抢答":
+                        answerQuickly(email, signTime, signText, courseBean, activeId);
+                        break;
+                    case "测验":
+                        testVerification(email, courseBean, signText, signTime, activeId);
+                        break;
+                    case "评分":
+                        score(email, courseBean, signText, signTime, activeId);
+                        break;
+                    default:
+                        String message = "课程名称 -> " + "\t" + courseBean.getClassName() + "\n" +
+                                "活动类型 -> " + "\t" + signT + "\n" +
+                                "班级名称 -> " + "\t" + courseBean.getClassmate() + "\n" +
+                                "活动标题 -> " + "\t" + signText + "\n" +
+                                "剩余时间 -> " + signTime;
+                        temp.put(activeId, activeId);
+                        EmailUtil.sendMail(sendMessage, email, message);
+                        break;
+                }
+            }
+        }
+
+        private void score(String email, ClassBean courseBean, String signText, String signTime, String activeId) {
+
+            // TODO 发送邮件 有评分
+            String message = "课程名称 -> " + "\t" + courseBean.getClassName() + "\n" +
+                    "班级名称 -> " + "\t" + courseBean.getClassmate() + "\n" +
+                    "评分标题 -> " + "\t" + signText + "\n" +
+                    "剩余时间 -> " + signTime;
+            try {
+                EmailUtil.sendMail(sendMessage, email, message);
+                temp.put(activeId, activeId);
+            } catch (Exception e) {
+                temp.remove(activeId);
+                e.printStackTrace();
+            }
+
+        }
+
+        private void testVerification(String email, ClassBean courseBean, String signText, String signTime, String activeId) {
+
+            // TODO  发送邮件 有测验
+            String message = "课程名称 -> " + "\t" + courseBean.getClassName() + "\n" +
+                    "班级名称 -> " + "\t" + courseBean.getClassmate() + "\n" +
+                    "测验标题 -> " + "\t" + signText + "\n" +
+                    "剩余时间 -> " + "\t" + signTime;
+            try {
+                EmailUtil.sendMail(sendMessage, email, message);
+                temp.put(activeId, activeId);
+            } catch (Exception e) {
+                e.printStackTrace();
+                temp.remove(activeId);
+            }
+        }
+
+        private void answerQuickly(String email, String signTime, String signText, ClassBean courseBean, String activeId) throws Exception {
+            // TODO 发送邮件 有抢答
+            if (isAnswer) {
+                System.out.println(Boolean.parseBoolean(temp.get("answer")));
+                String answer = "https://mobilelearn.chaoxing.com/pptAnswer/stuAnswer?answerId="
+                        + activeId
+                        + "&classId=" + courseBean.getClassId()
+                        + "&courseId=" + courseBean.getCourseId()
+                        + "&stuName=" + name
+                        + "&role="
+                        + "appType=15&stuMiddlePage=1";
+                System.out.println(answer);
+                System.out.println("==============" + activeId + "抢答中=================");
+                HttpUtil.trustEveryone();
+                Connection.Response signResponse = Jsoup.connect(answer).cookies(cookiesMap).method(Connection.Method.GET).timeout(30000).execute();
+                Element element = signResponse.parse().body();
+                temp.put(activeId, "抢答成功");
+                Matcher matcher = pattern2.matcher(element.html());
+                if (matcher.find()) {
+                    System.out.println(courseBean.getClassName() + "抢答成功" + matcher.group());
+                    String message = "课程名称-> " + courseBean.getClassName() + "\n" +
+                            "班级名称 -> " + courseBean.getClassmate() + "\n" +
+                            "抢答标题 -> " + signText + "\n" +
+                            "抢答状态" + matcher.group() + "\n" +
+                            "剩余时间 -> " + signTime;
+                    try {
+                        EmailUtil.sendMail(sendMessage, email, message);
+                        temp.put(activeId, activeId);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        temp.remove(activeId);
+                    }
+                }
+            } else {
+                String message = "课程名称-> " + courseBean.getClassName() + "\n" +
+                        "班级名称 -> " + courseBean.getClassmate() + "\n" +
+                        "抢答标题 -> " + signText + "\n" +
+                        "抢答状态" + "未开启抢答" + "\n" +
+                        "剩余时间 -> " + signTime;
+                try {
+                    EmailUtil.sendMail(sendMessage, email, message);
+                    temp.put(activeId, activeId);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    temp.remove(activeId);
+                }
+            }
+        }
+
+
+        private void answerByActiveId(String email, String signTime, String signText, ClassBean courseBean, String activeId) throws Exception {
+            // TODO 发送邮件 有问卷
+            String message = "课程名称-> " + courseBean.getClassName() + "\n" +
+                    "班级名称 -> " + courseBean.getClassmate() + "\n" +
+                    "问卷标题 -> " + signText + "\n" +
+                    "剩余时间 -> " + signTime;
+            try {
+                EmailUtil.sendMail(sendMessage, email, message);
+                temp.put(activeId, activeId);
+            } catch (Exception e) {
+                e.printStackTrace();
+                temp.remove(activeId);
+            }
+        }
+
+        private void signByActiveId(String email, String signTime, String signText, ClassBean courseBean, HashMap<String, String> cookie, String name, ArrayList<PicBean> picBeans, String signPlace, String activeId) throws Exception {
+            // TODO 发送邮件  开始签到
+            String finalSignUrl = "https://mobilelearn.chaoxing.com/pptSign/stuSignajax?name="
+                    + name
+                    + "&address="
+                    + signPlace
+                    + "&activeId="
+                    + activeId
+                    + "&uid="
+                    + cookie.get("_uid")
+                    + "&clientip=&latitude=-1&longitude=-1&fid="
+                    + cookie.get("fid")
+                    + "&appType=15&ifTiJiao=1"
+                    + "&objectId=" + picBeans.get(new Random().nextInt(picBeans.size())).getObjectId();
+            try {
+                Document signBody = Jsoup.connect(finalSignUrl).timeout(300000).cookies(cookie).execute().parse();
+                String signState = signBody.getElementsByTag("body").text();
+                if ("您已签到过了".equals(signState)) {
+                    temp.put(activeId, activeId);
+                } else {
+                    String message = "========这是签到=========" + "\n" +
+                            "班级名称-> " + courseBean.getClassmate() + "\n" +
+                            "课程名称 -> " + courseBean.getClassName() + "\n" +
+                            "签到类型 -> " + signText + "\n" +
+                            "签到状态 -> " + signState + "\n" +
+                            "剩余时间 -> " + signTime + "\n" +
+                            "=========签到结束========";
+                    EmailUtil.sendMail(sendMessage, email, message);
+                }
+            } catch (Exception e) {
+                EmailUtil.sendMail(sendMessage, email, courseBean.getClassmate() + "可能签到失败(服务器会自动重试),建议手动看看");
+                e.printStackTrace();
+                temp.remove(activeId);
+            }
+        }
+
+    }
+
 }

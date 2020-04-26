@@ -22,7 +22,7 @@ public class picinit {
         this.stringStringHashMap = stringStringHashMap;
     }
 
-    public void initPic(ArrayList<PicBean> picBeans) throws Exception {
+    public synchronized void initPic(ArrayList<PicBean> picBeans) throws Exception {
         // 到这里一定登录成功（bug除外）
         String getTokenUrl = "https://pan-yz.chaoxing.com/api/token/uservalid";
 
@@ -35,7 +35,7 @@ public class picinit {
         String uploadUrl = "https://pan-yz.chaoxing.com/upload?_token=" + tokenBean.get_token();
 
         HashMap<String, String> hashMap = new HashMap<>();
-        hashMap.put("puid", "82674419");
+        hashMap.put("puid", stringStringHashMap.get("UID"));
         File img = new File("img");
         File[] files = img.listFiles();
         if (files != null) {
@@ -54,6 +54,14 @@ public class picinit {
                         System.out.println("初始化图片数量" + picBeans.size());
                     }
                 });
+//                Connection.Response execute = Jsoup.connect(uploadUrl)
+//                        .method(Connection.Method.POST)
+//                        .cookies(stringStringHashMap)
+//                        .data("puid", stringStringHashMap.get("UID"))
+//                        .data("file", file.getName(), new FileInputStream(file))
+//                        .execute();
+//                System.out.println(execute.body());
+
             }
         } else {
             System.out.println("未添加图片,签到将没有图片");
@@ -65,6 +73,7 @@ public class picinit {
         //创建OkHttpClient对象(前提是导入了okhttp.jar和okio.jar)
         OkHttpClient client = new OkHttpClient().newBuilder()
                 .hostnameVerifier(SSLSocketClient.getHostnameVerifier())//配置    //忽略验证证书
+                .sslSocketFactory(SSLSocketClient.getSSLSocketFactory())
                 .build();
 
         MultipartBody.Builder requestBody = new MultipartBody.Builder().setType(MultipartBody.FORM);

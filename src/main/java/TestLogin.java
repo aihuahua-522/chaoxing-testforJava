@@ -126,7 +126,8 @@ public class TestLogin {
      */
     @Test
     public void getClassRoom() throws IOException {
-        String getClassUrl = "http://mooc1-2.chaoxing.com/visit/courses";
+        String getClassUrl = "http://mooc1-2.chaoxin" +
+                "g.com/visit/courses";
         HashMap<String, String> map = new HashMap<>();
 
 //        map.put("lv", "5");
